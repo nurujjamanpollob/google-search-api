@@ -1,0 +1,44 @@
+# Gradle
+.gradle
+build/
+
+# Ignore Gradle Wrapper generated files
+!gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
+
+# IDE files
+# IntelliJ
+.idea/
+*.iml
+*.iws
+out/
+
+# Eclipse
+.classpath
+.project
+.settings/
+
+# NetBeans
+/nbproject/private/
+/build/
+/dist/
+.nb-gradle/
+
+# VS Code
+.vscode/
+
+# Log files
+*.log
+
+# Temporary files
+*.tmp
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+
+# Local properties file
+local.properties
+
+# Java crash logs
+hs_err_pid*

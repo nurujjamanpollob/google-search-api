@@ -1,0 +1,46 @@
+plugins {
+    id 'java-library'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Use the Google Cloud Libraries BOM to manage versions
+    implementation platform('com.google.cloud:libraries-bom:26.40.0')
+
+    // Google API Client and OAuth
+    implementation 'com.google.api-client:google-api-client'
+    implementation 'com.google.http-client:google-http-client-gson'
+    implementation 'com.google.oauth-client:google-oauth-client-java6'
+    implementation 'com.google.oauth-client:google-oauth-client-jetty'
+
+    // Specific Google Service APIs (versions managed by BOM)
+    implementation("com.google.apis:google-api-services-customsearch:v1-rev20240821-2.0.0") // fixed version
+    implementation("com.google.apis:google-api-services-cloudresourcemanager:v1-rev20250606-2.0.0") // fixed version
+    implementation("com.google.apis:google-api-services-serviceusage:v1-rev20250919-2.0.0") // fixed version
+    implementation group: 'com.google.apis', name: 'google-api-services-apikeys', version: 'v2-rev20241016-2.0.0'
+
+    // JSON support
+    implementation 'com.google.code.gson:gson:2.10.1'
+
+    // Additional dependencies for website downloading and screenshot functionality
+    implementation 'org.jsoup:jsoup:1.15.4'
+    implementation 'com.squareup.okhttp3:okhttp:4.10.0'
+    implementation 'com.fasterxml.jackson.core:jackson-core:2.15.1'
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.15.1'
+
+
+    implementation 'org.seleniumhq.selenium:selenium-java:4.38.0'
+    implementation 'org.seleniumhq.selenium:selenium-chrome-driver:4.38.0'
+    implementation 'org.seleniumhq.selenium:selenium-devtools-v142:4.38.0' // Add this line
+
+    // For website download and preservation of original styling
+    implementation("org.apache.httpcomponents.client5:httpclient5:5.5.1")
+    implementation 'com.google.code.gson:gson:2.10.1'
+    implementation project(":classes")
+
+    // For screenshot functionality
+    implementation 'org.seleniumhq.selenium:selenium-chrome-driver:4.15.0'
+}

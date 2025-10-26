@@ -1,0 +1,24 @@
+apply plugin: 'java'
+
+group = 'javadev.stringcollections.textreplacor'
+version = '1.0.1'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testImplementation platform('org.junit:junit-bom:5.10.0')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    // add jetbrains annotations
+    compileOnly 'org.jetbrains:annotations:16.0.2'
+    // add apache commons io
+    implementation 'commons-io:commons-io:2.14.0'
+
+    implementation 'org.apache.tika:tika-core:2.9.1'
+
+}
+
+test {
+    useJUnitPlatform()
+}
