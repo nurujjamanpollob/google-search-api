@@ -42,3 +42,5 @@ local.properties
 
 # Java crash logs
 hs_err_pid*
+/client_secret_250872831710-4o4siur6uvchnlmsr0v9voub44a4qidu.apps.googleusercontent.com.json
+/client_secrets.json
