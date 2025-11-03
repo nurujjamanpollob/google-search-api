@@ -1,5 +1,6 @@
 plugins {
     id 'java-library'
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
 }
 
 repositories {
@@ -43,4 +44,15 @@ dependencies {
 
     // For screenshot functionality
     implementation 'org.seleniumhq.selenium:selenium-chrome-driver:4.15.0'
+}
+
+shadowJar {
+    archiveBaseName.set(project.name)
+    archiveClassifier.set('') // produce e.g. myproject.jar instead of myproject-all.jar
+    mergeServiceFiles() // helpful for META-INF/services
+}
+
+// Make sure the regular build produces the shadow jar as part of the build lifecycle
+tasks.build {
+    dependsOn tasks.shadowJar
 }
