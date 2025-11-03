@@ -1,3 +1,4 @@
+
 # Eaze Search Engine API
 
 A powerful Java library for seamless integration with the Google Custom Search API, featuring robust tools for website downloading and screenshot capture.
@@ -102,6 +103,47 @@ screenshotService.captureScreenshot("https://example.com", "./screenshots/screen
 
 // Capture a long, full-page screenshot
 screenshotService.captureLongScreenshot("https://example.com", "./screenshots/full_page_screenshot.png");
+```
+
+### Direct Google Search Scraping (Selenium-based)
+
+For scenarios requiring direct scraping of Google's search results page, the library provides the `GoogleSearchAPI`. This tool uses Selenium WebDriver to automate Google Chrome, providing a robust way to get organic search results without an API key.
+
+**Robust CAPTCHA Handling:** The `GoogleSearchAPI` is designed to handle Google's CAPTCHA challenges gracefully. It initially runs the browser in headless mode for efficiency. If a CAPTCHA is detected, it automatically relaunches in a visible (non-headless) browser window, allowing you to solve the puzzle manually. The program will wait for you to complete the CAPTCHA before proceeding to scrape the results.
+
+**Isolated Browser Profile:** To avoid conflicts with your personal browsing data, the API creates and uses a separate, isolated Chrome profile for all automation tasks. This ensures that your bookmarks, history, and sessions are not affected.
+
+#### GoogleSearchAPI Class
+
+This class provides the core functionality for performing searches and scraping results.
+
+```java
+// Initialize the API. You can provide a path to your ChromeDriver.
+// If no path is provided, it will use the one in the system's PATH.
+GoogleSearchAPI googleSearchAPI = new GoogleSearchAPI();
+
+// Perform a search
+List<GoogleSearchResultObject> results = googleSearchAPI.search("your search query");
+
+// Process the results
+for (GoogleSearchResultObject result : results) {
+    System.out.println("Title: " + result.getTitle());
+    System.out.println("Link: " + result.getLink());
+    System.out.println("Description: " + result.getDescription());
+    System.out.println("--------------------");
+}
+```
+
+#### GoogleSearchResultObject Class
+
+This is a simple data object that holds the information for a single search result scraped from Google.
+
+```java
+public class GoogleSearchResultObject {
+    public String getTitle();
+    public String getLink();
+    public String getDescription();
+}
 ```
 
 ## How to Obtain Search Engine ID
@@ -243,6 +285,26 @@ public class ScreenshotService {
 }
 ```
 
+### GoogleSearchAPI Class
+
+```java
+public class GoogleSearchAPI {
+    public GoogleSearchAPI();
+    public GoogleSearchAPI(String driverPath);
+    public List<GoogleSearchResultObject> search(String query) throws UnsupportedEncodingException;
+}
+```
+
+### GoogleSearchResultObject Class
+
+```java
+public class GoogleSearchResultObject {
+    public String getTitle();
+    public String getLink();
+    public String getDescription();
+}
+```
+
 ## Environment Variables
 
 -   `GOOGLE_CLIENT_ID`: Your OAuth 2.0 client ID
@@ -270,7 +332,6 @@ try {
     System.err.println("Environment variables not set: " + e.getMessage());
 }
 ```
+### Credits
 
-## License
-
-This project is licensed under the MIT License - see the `LICENSE` file for details.
+Developed by the Eaze Editor Team, this library is generated using advanced AI tools to streamline Google Custom Search API integration and enhance web scraping capabilities.
