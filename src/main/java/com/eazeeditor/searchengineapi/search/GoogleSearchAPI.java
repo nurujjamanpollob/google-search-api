@@ -324,6 +324,44 @@ public class GoogleSearchAPI {
         return results;
     }
 
+    /**
+     * Update the automation profile by copying the latest default profile.
+     * This can be used to refresh cookies and session data.
+     */
+    public void updateAutomationProfile() {
+        String automationProfilePath = getAutomationProfilePath();
+        java.io.File automationProfileDir = new java.io.File(automationProfilePath);
+
+        // Delete existing automation profile
+        if (automationProfileDir.exists()) {
+            ColoredConsoleOutput.printYellowText("[GoogleSearchAPI] Deleting existing automation profile for update...");
+            try {
+                deleteDirectory(automationProfileDir);
+                ColoredConsoleOutput.printGreenText("[GoogleSearchAPI] Existing automation profile deleted.");
+            } catch (Exception e) {
+                ColoredConsoleOutput.printRedText("[GoogleSearchAPI] Error deleting automation profile: " + e.getMessage());
+                return;
+            }
+        }
+
+        // Copy the latest default profile
+        String sourceProfilePath = getDefaultChromeProfilePath();
+        if (sourceProfilePath != null) {
+            ColoredConsoleOutput.printYellowText("[GoogleSearchAPI] Copying latest default Chrome profile to automation profile...");
+            try {
+                copyDirectory(new java.io.File(sourceProfilePath), automationProfileDir);
+                ColoredConsoleOutput.printGreenText("[GoogleSearchAPI] Automation profile updated successfully at: " + automationProfileDir.getAbsolutePath());
+            } catch (java.io.IOException e) {
+                ColoredConsoleOutput.printRedText("[GoogleSearchAPI] Failed to copy Chrome profile: " + e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Main method for testing the GoogleSearchAPI.
+     * @param args Command line arguments.
+     * @throws UnsupportedEncodingException if URL encoding fails.
+     */
     public static void main(String[] args) throws UnsupportedEncodingException {
         GoogleSearchAPI googleSearchAPI = new GoogleSearchAPI();
 
@@ -345,5 +383,7 @@ public class GoogleSearchAPI {
             }
         }
     }
+
+
 
 }
