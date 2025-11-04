@@ -24,6 +24,7 @@ import java.util.Optional;
 public class ScreenshotService {
 
     private final String chromeBinary;
+    private String userDataDir;
 
     public ScreenshotService() throws IllegalStateException {
         // throw error if CHROME_BINARY_PATH env variable is not set
@@ -46,6 +47,14 @@ public class ScreenshotService {
         this.chromeBinary = chromeBinaryPath;
     }
 
+    /**
+     * Sets a custom user data directory for the Chrome instance.
+     * @param userDataDir The path to the user data directory.
+     */
+    public void setUserDataDir(String userDataDir) {
+        this.userDataDir = userDataDir;
+    }
+
     public void captureScreenshot(String url, String localPath) {
         captureScreenshot(url, localPath, 0);
     }
@@ -60,6 +69,10 @@ public class ScreenshotService {
                     "--disable-gpu",
                     "--window-size=1920,1080"
             );
+
+            if (this.userDataDir != null && !this.userDataDir.isEmpty()) {
+                options.addArguments("--user-data-dir=" + this.userDataDir);
+            }
 
             driver = new ChromeDriver(options);
             driver.get(url);
@@ -107,6 +120,10 @@ public class ScreenshotService {
                     "--disable-gpu",
                     "--window-size=1920,1080"
             );
+
+            if (this.userDataDir != null && !this.userDataDir.isEmpty()) {
+                options.addArguments("--user-data-dir=" + this.userDataDir);
+            }
 
             driver = new ChromeDriver(options);
             DevTools devTools = driver.getDevTools();
@@ -183,4 +200,18 @@ public class ScreenshotService {
             }
         }
     }
+
+    /**
+     * Gets the OS-specific path for the dedicated automation profile directory.
+     * This directory is outside the standard Chrome user data location to avoid conflicts.
+     *
+     * @return The path to the automation profile directory, or null if the OS is not supported.
+     */
+    public static String getAutomationProfilePath() {
+        String userHome = System.getProperty("user.home");
+        String separator = java.io.File.separator;
+        // Use a path in the user's home directory to avoid conflicts
+        return userHome + separator + "SeleniumChromeAutomationProfile";
+    }
+
 }
