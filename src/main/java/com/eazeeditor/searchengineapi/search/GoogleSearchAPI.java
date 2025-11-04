@@ -2,6 +2,7 @@ package com.eazeeditor.searchengineapi.search;
 
 import com.eazeeditor.searchengineapi.objects.GoogleSearchResultObject;
 import javadev.stringcollections.textreplacor.console.ColoredConsoleOutput;
+import org.jetbrains.annotations.NotNull;
 import org.openqa.selenium.By;
 import org.openqa.selenium.NoSuchElementException;
 import org.openqa.selenium.WebDriver;
@@ -95,7 +96,7 @@ public class GoogleSearchAPI {
     private WebDriver createDriver(boolean headless) {
         ChromeOptions options = new ChromeOptions();
 
-        // Set custom driver path if provided
+        // Set custom binary path if provided
         if (this.driverPath != null && !this.driverPath.isEmpty()) {
             options.setBinary(this.driverPath);
         }
@@ -105,23 +106,29 @@ public class GoogleSearchAPI {
 
         options.setExperimentalOption("excludeSwitches", new String[]{"enable-automation"});
 
-        String automationProfilePath = getAutomationProfilePath();
-        java.io.File automationProfileDir = new java.io.File(automationProfilePath);
+        String automationUserDataPath = getAutomationProfilePath();
+        java.io.File automationUserDataDir = new java.io.File(automationUserDataPath);
+        java.io.File automationProfileDir = new java.io.File(automationUserDataDir, "Default");
 
+        // If the specific "Default" profile doesn't exist in our automation folder, create it.
         if (!automationProfileDir.exists()) {
             String sourceProfilePath = getDefaultChromeProfilePath();
             if (sourceProfilePath != null) {
                 ColoredConsoleOutput.printYellowText("[GoogleSearchAPI] Automation profile not found. Creating a copy of your default profile...");
                 try {
                     copyDirectory(new java.io.File(sourceProfilePath), automationProfileDir);
-                    ColoredConsoleOutput.printGreenText("[GoogleSearchAPI] Automation profile created successfully at: " + automationProfilePath);
+                    ColoredConsoleOutput.printGreenText("[GoogleSearchAPI] Automation profile created successfully at: " + automationProfileDir.getAbsolutePath());
                 } catch (java.io.IOException e) {
                     ColoredConsoleOutput.printRedText("[GoogleSearchAPI] Failed to copy Chrome profile: " + e.getMessage());
+                    // Don't use the copied profile if it fails
                 }
             }
         }
-        // Point user-data-dir directly to the isolated automation profile directory
-        options.addArguments("user-data-dir=" + automationProfilePath);
+
+        // Point to the parent User Data directory, not the Default profile itself.
+        options.addArguments("user-data-dir=" + automationUserDataPath);
+        // Explicitly tell Chrome to use the "Default" profile within that User Data directory.
+        options.addArguments("--profile-directory=Default");
 
         options.addArguments("--disable-gpu");
         options.addArguments("--window-size=1920,1200");
@@ -133,6 +140,41 @@ public class GoogleSearchAPI {
 
         return new ChromeDriver(options);
     }
+
+    /**
+     * Deletes the automation profile directory for debugging purposes.
+     * This will force a fresh copy of the default profile on the next run.
+     */
+    public void deleteAutomationProfile() {
+        String automationProfilePath = getAutomationProfilePath();
+        java.io.File profileDir = new java.io.File(automationProfilePath);
+        if (profileDir.exists()) {
+            ColoredConsoleOutput.printYellowText("[GoogleSearchAPI] Deleting automation profile at: " + automationProfilePath);
+            try {
+                deleteDirectory(profileDir);
+                ColoredConsoleOutput.printGreenText("[GoogleSearchAPI] Automation profile deleted successfully.");
+            } catch (Exception e) {
+                ColoredConsoleOutput.printRedText("[GoogleSearchAPI] Error deleting automation profile: " + e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Recursively deletes a directory.
+     * @param directory The directory to delete.
+     */
+    private void deleteDirectory(java.io.File directory) {
+        java.io.File[] allContents = directory.listFiles();
+        if (allContents != null) {
+            for (java.io.File file : allContents) {
+                deleteDirectory(file);
+            }
+        }
+        if (!directory.delete()) {
+            System.err.println("Failed to delete: " + directory.getAbsolutePath());
+        }
+    }
+
 
     /**
      * Gets the OS-specific path to the default Chrome profile directory.
@@ -168,45 +210,61 @@ public class GoogleSearchAPI {
     }
 
     /**
-     * Recursively copies a directory. Renamed from copyChromeProfile for clarity.
+     * Recursively copies a directory using the more performant java.nio API.
+     * It skips files and directories known to cause locking issues or are unnecessary (e.g., cache).
      *
-     * @param sourceDirectory      The source directory to copy.
-     * @param destinationDirectory The destination directory.
+     * @param sourceDir      The source directory to copy.
+     * @param targetDir The destination directory.
      * @throws java.io.IOException if an I/O error occurs.
      */
-    private void copyDirectory(java.io.File sourceDirectory, java.io.File destinationDirectory) throws java.io.IOException {
-        if (!destinationDirectory.exists()) {
-            boolean creationResult = destinationDirectory.mkdirs();
+    private void copyDirectory(java.io.File sourceDir, java.io.File targetDir) throws java.io.IOException {
+        java.nio.file.Path sourcePath = sourceDir.toPath();
+        java.nio.file.Path targetPath = targetDir.toPath();
 
-            if (!creationResult) {
-                throw new java.io.IOException("Failed to create directory: " + destinationDirectory.getAbsolutePath());
-            }
-        }
-        java.io.File[] files = sourceDirectory.listFiles();
-        if (files == null) return;
-
-        for (java.io.File file : files) {
-            java.io.File destFile = new java.io.File(destinationDirectory, file.getName());
-            String fileName = file.getName().toLowerCase();
-            if (fileName.equals("lockfile") || fileName.endsWith(".lock")) {
-                continue; // Skip lock files
-            }
-            if (file.isDirectory()) {
-                copyDirectory(file, destFile);
-            } else {
-                try (java.io.InputStream in = new java.io.FileInputStream(file);
-                     java.io.OutputStream out = new java.io.FileOutputStream(destFile)) {
-                    byte[] buf = new byte[8192];
-                    int length;
-                    while ((length = in.read(buf)) > 0) {
-                        out.write(buf, 0, length);
-                    }
-                } catch (java.io.IOException e) {
-                    System.err.println("Could not copy file: " + file.getAbsolutePath() + " - " + e.getMessage());
+        java.nio.file.Files.walkFileTree(sourcePath, new java.nio.file.SimpleFileVisitor<java.nio.file.Path>() {
+            @NotNull
+            @Override
+            public java.nio.file.FileVisitResult preVisitDirectory(@NotNull java.nio.file.Path dir, @NotNull java.nio.file.attribute.BasicFileAttributes attrs) throws java.io.IOException {
+                String dirName = dir.getFileName().toString().toLowerCase();
+                // Skip cache directories as they are large, volatile, and can cause issues.
+                if (dirName.contains("cache")) {
+                    return java.nio.file.FileVisitResult.SKIP_SUBTREE;
                 }
+                java.nio.file.Path newDir = targetPath.resolve(sourcePath.relativize(dir));
+                try {
+                    java.nio.file.Files.copy(dir, newDir);
+                } catch (java.nio.file.FileAlreadyExistsException e) {
+                    // Ignore if the directory already exists
+                }
+                return java.nio.file.FileVisitResult.CONTINUE;
             }
-        }
+
+            @NotNull
+            @Override
+            public java.nio.file.FileVisitResult visitFile(@NotNull java.nio.file.Path file, @NotNull java.nio.file.attribute.BasicFileAttributes attrs) {
+                String fileName = file.getFileName().toString().toLowerCase();
+                // Skip lock files, singleton/session state files to prevent crashes.
+                if (fileName.equals("lockfile") || fileName.startsWith("singleton") || fileName.contains("session")) {
+                    return java.nio.file.FileVisitResult.CONTINUE;
+                }
+                try {
+                    java.nio.file.Files.copy(file, targetPath.resolve(sourcePath.relativize(file)));
+                } catch (java.io.IOException e) {
+                    // Log error but continue trying to copy other files.
+                    System.err.println("Could not copy file: " + file + " - " + e.getMessage());
+                }
+                return java.nio.file.FileVisitResult.CONTINUE;
+            }
+
+            @NotNull
+            @Override
+            public java.nio.file.FileVisitResult visitFileFailed(@NotNull java.nio.file.Path file, @NotNull java.io.IOException exc) {
+                System.err.println("Failed to access file: " + file + " - " + exc.getMessage());
+                return java.nio.file.FileVisitResult.CONTINUE;
+            }
+        });
     }
+
 
 
     /**
