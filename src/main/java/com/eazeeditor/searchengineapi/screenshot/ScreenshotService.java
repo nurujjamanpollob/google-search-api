@@ -1,56 +1,42 @@
 package com.eazeeditor.searchengineapi.screenshot;
 
 import javadev.stringcollections.textreplacor.io.PathResolver;
+import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.chrome.ChromeOptions;
 import org.openqa.selenium.devtools.DevTools;
-import org.openqa.selenium.devtools.v142.dom.model.Rect;
+import org.openqa.selenium.devtools.v142.emulation.Emulation;
 import org.openqa.selenium.devtools.v142.page.Page;
-import org.openqa.selenium.devtools.v142.page.model.Viewport;
+import org.openqa.selenium.support.ui.WebDriverWait;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.nio.file.Files;
+import java.time.Duration;
 import java.util.Base64;
 import java.util.Optional;
 
-/**
- * @author nurujjamanpollob
- * Service to capture screenshots of web pages using Selenium WebDriver and Chrome.
- * This class supports chrome binary path configuration via environment variable or constructor parameter,
- * and require chrome v142 to work correctly, haven't tested with other versions yet, and may not work with other versions.
- */
 public class ScreenshotService {
 
     private final String chromeBinary;
     private String userDataDir;
 
     public ScreenshotService() throws IllegalStateException {
-        // throw error if CHROME_BINARY_PATH env variable is not set
         String chromeBinaryPath = System.getenv("CHROME_BINARY_PATH");
         if (chromeBinaryPath == null || chromeBinaryPath.isEmpty()) {
-            throw new IllegalStateException("CHROME_BINARY_PATH environment variable is not set. use export CHROME_BINARY_PATH=/path/to/chrome or initialize this class with ScreenshotService(String chromeBinaryPath)");
+            throw new IllegalStateException("CHROME_BINARY_PATH environment variable is not set.");
         }
         this.chromeBinary = chromeBinaryPath;
     }
 
-    /**
-     * Constructor to initialize ScreenshotService with a specific Chrome binary path.
-     * Note: Tested with chrome v142 only, may not work with other versions, and not tested yet.
-     * @param chromeBinaryPath the path to the Chrome binary
-     */
     public ScreenshotService(String chromeBinaryPath) {
         if (chromeBinaryPath == null || chromeBinaryPath.isEmpty() || !PathResolver.isPathExists(chromeBinaryPath)) {
-            throw new IllegalArgumentException("chromeBinaryPath cannot be null or empty");
+            throw new IllegalArgumentException("Invalid chromeBinaryPath");
         }
         this.chromeBinary = chromeBinaryPath;
     }
 
-    /**
-     * Sets a custom user data directory for the Chrome instance.
-     * @param userDataDir The path to the user data directory.
-     */
     public void setUserDataDir(String userDataDir) {
         this.userDataDir = userDataDir;
     }
@@ -65,9 +51,11 @@ public class ScreenshotService {
             ChromeOptions options = new ChromeOptions();
             options.setBinary(this.chromeBinary);
             options.addArguments(
-                    "--headless",
+                    "--headless=new",
                     "--disable-gpu",
-                    "--window-size=1920,1080"
+                    "--window-size=1920,1080",
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage"
             );
 
             if (this.userDataDir != null && !this.userDataDir.isEmpty()) {
@@ -86,7 +74,7 @@ public class ScreenshotService {
 
             System.out.println("Screenshot captured for " + url + " at " + localPath);
         } catch (Exception e) {
-            e.printStackTrace();
+            throw new RuntimeException("Failed to capture standard screenshot for " + url, e);
         } finally {
             if (driver != null) {
                 driver.quit();
@@ -94,31 +82,26 @@ public class ScreenshotService {
         }
     }
 
-    /**
-     * Capture long screenshot and save to the output path
-     * @param url the url to capture screenshot
-     * @param localPath the local path to save the screenshot
-     */
     public void captureLongScreenshot(String url, String localPath) {
-        captureLongScreenshot(url, localPath, 0);
+        captureLongScreenshot(url, localPath, 3000);
     }
 
-
-    /**
-     * Capture long screenshot and save to the output path
-     * @param url the url to capture screenshot
-     * @param localPath the local path to save the screenshot
-     * @param delayInMillis the delay in milliseconds before taking the screenshot
-     */
     public void captureLongScreenshot(String url, String localPath, long delayInMillis) {
         ChromeDriver driver = null;
         try {
             ChromeOptions options = new ChromeOptions();
             options.setBinary(this.chromeBinary);
             options.addArguments(
-                    "--headless",
+                    "--headless=new",
                     "--disable-gpu",
-                    "--window-size=1920,1080"
+                    "--window-size=1920,1080",
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-web-security",
+                    "--disable-features=VizDisplayCompositor",
+                    "--disable-background-timer-throttling",
+                    "--disable-renderer-backgrounding",
+                    "--disable-backgrounding-occluded-windows"
             );
 
             if (this.userDataDir != null && !this.userDataDir.isEmpty()) {
@@ -131,58 +114,41 @@ public class ScreenshotService {
 
             driver.get(url);
 
-            if (delayInMillis > 0) {
-                Thread.sleep(delayInMillis);
-            }
+            robustScrollToBottom(driver, delayInMillis);
 
-            // Scroll down the page to trigger lazy-loaded elements
-            org.openqa.selenium.JavascriptExecutor js = (org.openqa.selenium.JavascriptExecutor) driver;
-            long totalHeight = (long) js.executeScript("return document.body.scrollHeight");
-            long viewportHeight = (long) js.executeScript("return window.innerHeight");
-            long scrolledHeight = 0;
+            // Get actual page dimensions
+            JavascriptExecutor js = (JavascriptExecutor) driver;
+            Long finalHeight = (Long) js.executeScript(
+                    "return Math.max(" +
+                            "document.body.scrollHeight, document.body.offsetHeight, " +
+                            "document.documentElement.clientHeight, document.documentElement.scrollHeight, " +
+                            "document.documentElement.offsetHeight);"
+            );
+            Long finalWidth = (Long) js.executeScript(
+                    "return Math.max(" +
+                            "document.body.scrollWidth, document.body.offsetWidth, " +
+                            "document.documentElement.clientWidth, document.documentElement.scrollWidth, " +
+                            "document.documentElement.offsetWidth);"
+            );
 
-            while (scrolledHeight < totalHeight) {
-                js.executeScript("window.scrollBy(0, arguments[0]);", viewportHeight);
-                scrolledHeight += viewportHeight;
-                Thread.sleep(1000); // Wait for content to load
-                long newTotalHeight = (long) js.executeScript("return document.body.scrollHeight");
-                if (newTotalHeight > totalHeight) {
-                    totalHeight = newTotalHeight;
-                }
-            }
-            // Wait for any final rendering
-            Thread.sleep(2000);
-
-
-            // get page max width and height
-            Rect rect = devTools.send(Page.getLayoutMetrics())
-                    .getContentSize();
-            Number width = rect.getWidth();
-            Number height = rect.getHeight();
-
-            devTools.send(org.openqa.selenium.devtools.v142.emulation.Emulation.setDeviceMetricsOverride(
-                    width.intValue(),
-                    height.intValue(),
-                    1,
-                    false,
-                    Optional.empty(),
-                    Optional.empty(),
-                    Optional.empty(),
-                    Optional.empty(),
-                    Optional.empty(),
-                    Optional.empty(),
-                    Optional.empty(),
-                    Optional.empty(),
-                    Optional.empty(),
+            // Set device metrics for full page capture
+            // This is the "zoom out viewport until whole content fit" part.
+            // It emulates a viewport as tall and wide as the entire page.
+            devTools.send(Emulation.setDeviceMetricsOverride(
+                    finalWidth.intValue(), finalHeight.intValue(), 1, false,
+                    Optional.empty(), Optional.empty(), Optional.empty(),
+                    Optional.empty(), Optional.empty(), Optional.empty(),
+                    Optional.empty(), Optional.empty(), Optional.empty(),
                     Optional.empty()
             ));
 
+            // Capture screenshot
             String data = devTools.send(Page.captureScreenshot(
                     Optional.of(Page.CaptureScreenshotFormat.PNG),
                     Optional.empty(),
-                    Optional.of(new Viewport(0, 0, width, height, 1)),
-                    Optional.of(true), // Use default for fromSurface
-                    Optional.empty(), // Not needed when clip is specified
+                    Optional.empty(),
+                    Optional.of(true), // captureBeyondViewport
+                    Optional.empty(),
                     Optional.empty()
             ));
 
@@ -193,7 +159,7 @@ public class ScreenshotService {
 
             System.out.println("Long screenshot captured for " + url + " at " + localPath);
         } catch (Exception e) {
-            e.printStackTrace();
+            throw new RuntimeException("Failed to capture long screenshot for " + url, e);
         } finally {
             if (driver != null) {
                 driver.quit();
@@ -201,17 +167,175 @@ public class ScreenshotService {
         }
     }
 
-    /**
-     * Gets the OS-specific path for the dedicated automation profile directory.
-     * This directory is outside the standard Chrome user data location to avoid conflicts.
-     *
-     * @return The path to the automation profile directory, or null if the OS is not supported.
-     */
-    public static String getAutomationProfilePath() {
-        String userHome = System.getProperty("user.home");
-        String separator = java.io.File.separator;
-        // Use a path in the user's home directory to avoid conflicts
-        return userHome + separator + "SeleniumChromeAutomationProfile";
+    // NEW: Overloaded method for convenience
+    public void capturePartialHeightScreenshot(String url, String localPath, int percentage) {
+        capturePartialHeightScreenshot(url, localPath, percentage, 3000);
     }
 
+    /**
+     * NEW: Captures a screenshot of the page, but only up to a certain percentage
+     * of the total page height.
+     *
+     * @param url           The URL to capture.
+     * @param localPath     The file path to save the screenshot.
+     * @param percentage    The percentage of the total page height to capture (1-100).
+     * @param delayInMillis The initial delay to wait for the page to settle.
+     */
+    public void capturePartialHeightScreenshot(String url, String localPath, int percentage, long delayInMillis) {
+        if (percentage < 1 || percentage > 100) {
+            throw new IllegalArgumentException("Percentage must be between 1 and 100.");
+        }
+
+        ChromeDriver driver = null;
+        try {
+            ChromeOptions options = new ChromeOptions();
+            options.setBinary(this.chromeBinary);
+            options.addArguments(
+                    "--headless=new",
+                    "--disable-gpu",
+                    "--window-size=1920,1080",
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-web-security",
+                    "--disable-features=VizDisplayCompositor",
+                    "--disable-background-timer-throttling",
+                    "--disable-renderer-backgrounding",
+                    "--disable-backgrounding-occluded-windows"
+            );
+
+            if (this.userDataDir != null && !this.userDataDir.isEmpty()) {
+                options.addArguments("--user-data-dir=" + this.userDataDir);
+            }
+
+            driver = new ChromeDriver(options);
+            DevTools devTools = driver.getDevTools();
+            devTools.createSession();
+
+            driver.get(url);
+
+            // Scroll to bottom to load all content, which ensures we get the *true* full height
+            robustScrollToBottom(driver, delayInMillis);
+
+            // Get actual page dimensions
+            JavascriptExecutor js = (JavascriptExecutor) driver;
+            Long fullHeight = (Long) js.executeScript(
+                    "return Math.max(" +
+                            "document.body.scrollHeight, document.body.offsetHeight, " +
+                            "document.documentElement.clientHeight, document.documentElement.scrollHeight, " +
+                            "document.documentElement.offsetHeight);"
+            );
+            Long fullWidth = (Long) js.executeScript(
+                    "return Math.max(" +
+                            "document.body.scrollWidth, document.body.offsetWidth, " +
+                            "document.documentElement.clientWidth, document.documentElement.scrollWidth, " +
+                            "document.documentElement.offsetWidth);"
+            );
+
+            // NEW: Calculate the target height based on the percentage
+            int targetHeight = (int) (fullHeight * (percentage / 100.0));
+            // Ensure height is at least 1px
+            targetHeight = Math.max(targetHeight, 1);
+
+            // Set device metrics for the *partial* page capture
+            devTools.send(Emulation.setDeviceMetricsOverride(
+                    fullWidth.intValue(), targetHeight, 1, false,
+                    Optional.empty(), Optional.empty(), Optional.empty(),
+                    Optional.empty(), Optional.empty(), Optional.empty(),
+                    Optional.empty(), Optional.empty(), Optional.empty(),
+                    Optional.empty()
+            ));
+
+            // Capture screenshot
+            String data = devTools.send(Page.captureScreenshot(
+                    Optional.of(Page.CaptureScreenshotFormat.PNG),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.of(true), // captureBeyondViewport
+                    Optional.empty(),
+                    Optional.empty()
+            ));
+
+            byte[] imageBytes = Base64.getDecoder().decode(data);
+            try (FileOutputStream fos = new FileOutputStream(localPath)) {
+                fos.write(imageBytes);
+            }
+
+            System.out.println("Partial screenshot (" + percentage + "%) captured for " + url + " at " + localPath);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to capture partial screenshot for " + url, e);
+        } finally {
+            if (driver != null) {
+                driver.quit();
+            }
+        }
+    }
+
+
+    /**
+     * Replaces both waitForAnimations and scrollToBottomWithAnimationSupport.
+     * This method scrolls down the page iteratively until the page height stabilizes,
+     * ensuring all lazy-loaded content is triggered and loaded.
+     */
+    private void robustScrollToBottom(ChromeDriver driver, long initialDelayInMillis) throws InterruptedException {
+        WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+
+        // 1. Initial wait for the page to settle (using the provided delay)
+        if (initialDelayInMillis > 0) {
+            Thread.sleep(initialDelayInMillis);
+        }
+        wait.until(d -> driver.executeScript("return document.readyState").equals("complete"));
+
+        long lastHeight = (Long) driver.executeScript("return document.body.scrollHeight");
+        long currentScroll = 0;
+        long viewportHeight = (Long) driver.executeScript("return window.innerHeight");
+        long scrollStep = (long) (viewportHeight * 0.85); // Scroll in 85% viewport steps
+
+        while (true) {
+            // 2. Scroll down by one step
+            currentScroll += scrollStep;
+            driver.executeScript("window.scrollTo(0, " + currentScroll + ");");
+
+            // 3. Give a brief, pragmatic pause to trigger JS-based lazy-loading
+            Thread.sleep(400);
+
+            // 4. Wait for JS/jQuery to be idle
+            try {
+                wait.until(d -> (Boolean) ((JavascriptExecutor) driver).executeScript(
+                        "return (typeof jQuery === 'undefined' || jQuery.active === 0)"
+                ));
+            } catch (Exception e) {
+                // Ignore if jQuery check fails (e.g., jQuery not present or timeout)
+            }
+
+            // 5. Check the new page height after loading
+            long newHeight = (Long) driver.executeScript("return document.body.scrollHeight");
+
+            // 6. Check if we're done:
+            // If the height hasn't changed AND we've scrolled past the bottom, we're done.
+            if (newHeight == lastHeight && currentScroll >= newHeight) {
+                break;
+            }
+
+            // If height has changed, update it and continue the loop
+            lastHeight = newHeight;
+
+            // Don't scroll unnecessarily past the new bottom
+            if (currentScroll > newHeight) {
+                currentScroll = newHeight;
+            }
+        }
+
+        // 7. One final scroll to the absolute bottom
+        driver.executeScript("window.scrollTo(0, document.body.scrollHeight);");
+
+        // 8. A final pragmatic wait for any footer animations/content
+        Thread.sleep(2000);
+    }
+
+
+    public static String getAutomationProfilePath() {
+        String userHome = System.getProperty("user.home");
+        String separator = File.separator;
+        return userHome + separator + "SeleniumChromeAutomationProfile";
+    }
 }
